@@ -91,11 +91,6 @@ const CandidateHomePage = () => {
     return <Navigate to="/login" replace />;
   }
 
-  const formatSalary = (salary, currency = '$') => {
-    if (!salary) return "Not Disclosed";
-    return `${currency}${salary.toLocaleString()}`;
-  };
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-900 via-indigo-900 to-blue-900 text-white">
       {/* Welcome Section */}
@@ -335,6 +330,11 @@ const ApplicationCard = ({ application, index }) => {
       </Card>
     </motion.div>
   );
+};
+
+const formatSalary = (salary, currency = '$') => {
+  if (!salary) return "Not Disclosed";
+  return `${currency}${salary.toLocaleString()}`;
 };
 
 export default CandidateHomePage;
