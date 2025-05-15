@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { useToast } from '@/components/ui/use-toast';
 import { motion } from 'framer-motion';
-import { UserCircle, UploadCloud, Save, ArrowLeft, FileText } from 'lucide-react';
-import { supabase } from '@/lib/supabaseClient';
+import { UserCircle, UploadCloud, Save, ArrowLeft, Trash2, FileText } from 'lucide-react';
 
 const CandidateProfilePage = () => {
   const { user, profile, fetchProfile, loading: authLoading } = useAuth();
@@ -16,7 +16,9 @@ const CandidateProfilePage = () => {
   const [fullName, setFullName] = useState('');
   const [avatarUrl, setAvatarUrl] = useState(null);
   const [uploading, setUploading] = useState(false);
-  const [cvUrl, setCvUrl] = useState(null);
+  const [cvFile, setCvFile] = useState(null);
+  const [cvUploading, setCvUploading] = useState(false);
+  const [existingResumes, setExistingResumes] = useState([]);
   const [pageLoading, setPageLoading] = useState(true);
 
   useEffect(() => {
@@ -25,66 +27,30 @@ const CandidateProfilePage = () => {
       setAvatarUrl(profile.avatar_url || null);
     }
     if (user) {
-      checkForCv();
+      fetchResumes();
     }
     if (!authLoading) setPageLoading(false);
   }, [profile, user, authLoading]);
 
-  const checkForCv = async () => {
+  const fetchResumes = async () => {
+    if (!user) return;
     try {
-      // First, get the latest resume record for the user
-      const { data: resumeData, error: resumeError } = await supabase
+      const { data, error } = await supabase
         .from('resumes')
-        .select('storage_path')
+        .select('id, file_name, uploaded_at, storage_path')
         .eq('user_id', user.id)
-        .order('uploaded_at', { ascending: false })
-        .limit(1)
-        .single();
+        .order('uploaded_at', { ascending: false });
 
-      if (resumeError) {
-        if (resumeError.code === 'PGRST116') {
-          // No CV found - this is not an error, just means no CV uploaded yet
-          setCvUrl(null);
-          return;
-        }
-        throw resumeError;
-      }
-
-      if (!resumeData?.storage_path) {
-        setCvUrl(null);
-        return;
-      }
-
-      // Get the public URL for the CV
-      const { data: { publicUrl }, error: urlError } = supabase
-        .storage
-        .from('cvs')
-        .getPublicUrl(resumeData.storage_path);
-
-      if (urlError) throw urlError;
-
-      // Verify the file exists by checking the storage bucket
-      const { data: fileCheck, error: fileError } = await supabase
-        .storage
-        .from('cvs')
-        .list(resumeData.storage_path.split('/').slice(0, -1).join('/'));
-
-      if (fileError) throw fileError;
-
-      const fileName = resumeData.storage_path.split('/').pop();
-      if (fileCheck.some(file => file.name === fileName)) {
-        setCvUrl(publicUrl);
-      } else {
-        setCvUrl(null);
-      }
+      if (error) throw error;
+      setExistingResumes(data || []);
     } catch (error) {
-      console.error('Error checking CV:', error);
-      toast({
-        title: "Error Loading CV",
-        description: "Unable to check for existing CV.",
-        variant: "destructive"
+      console.error('Error fetching resumes:', error);
+      toast({ 
+        title: "Error fetching resumes", 
+        description: error.message, 
+        variant: "destructive" 
       });
-      setCvUrl(null);
+      setExistingResumes([]);
     }
   };
 
@@ -100,9 +66,16 @@ const CandidateProfilePage = () => {
     const { error } = await supabase.from('profiles').upsert(updates);
 
     if (error) {
-      toast({ title: "Profile Update Failed", description: error.message, variant: "destructive" });
+      toast({ 
+        title: "Profile Update Failed", 
+        description: error.message, 
+        variant: "destructive" 
+      });
     } else {
-      toast({ title: "Profile Updated", description: "Your profile has been successfully updated." });
+      toast({ 
+        title: "Profile Updated", 
+        description: "Your profile has been successfully updated." 
+      });
       fetchProfile(user.id);
     }
     setUploading(false);
@@ -120,86 +93,38 @@ const CandidateProfilePage = () => {
       const fileName = `${user.id}-${Math.random()}.${fileExt}`;
       const filePath = `avatars/${fileName}`;
 
-      let { error: uploadError } = await supabase.storage.from('avatars').upload(filePath, file);
+      let { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file);
 
-      if (uploadError) {
-        throw uploadError;
-      }
+      if (uploadError) throw uploadError;
 
-      const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(filePath);
-      
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath);
+
       const updates = {
         id: user.id,
         avatar_url: publicUrl,
         updated_at: new Date(),
       };
-      let { error: updateError } = await supabase.from('profiles').upsert(updates);
+
+      let { error: updateError } = await supabase
+        .from('profiles')
+        .upsert(updates);
+
       if (updateError) throw updateError;
 
       setAvatarUrl(publicUrl);
       fetchProfile(user.id);
-      toast({ title: "Avatar Updated", description: "Your avatar has been changed." });
-
-    } catch (error) {
-      toast({ title: "Avatar Upload Failed", description: error.message, variant: "destructive" });
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const handleCvUpload = async (event) => {
-    if (!event.target.files || event.target.files.length === 0) {
-      toast({ title: "No file selected", description: "Please select a CV to upload.", variant: "destructive" });
-      return;
-    }
-
-    const file = event.target.files[0];
-    
-    if (file.type !== 'application/pdf') {
-      toast({ title: "Invalid File Type", description: "Please upload a PDF file.", variant: "destructive" });
-      return;
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-      toast({ title: "File Too Large", description: "CV file size should not exceed 5MB.", variant: "destructive" });
-      return;
-    }
-
-    try {
-      setUploading(true);
-
-      // Generate a unique file path for the CV
-      const timestamp = new Date().getTime();
-      const filePath = `cv/${user.id}/${timestamp}-${file.name}`;
-
-      // Upload file to Supabase Storage
-      const { error: uploadError } = await supabase.storage
-        .from('cvs')
-        .upload(filePath, file);
-
-      if (uploadError) throw uploadError;
-
-      // Create or update the resume record in the database
-      const { error: resumeError } = await supabase
-        .from('resumes')
-        .insert({
-          user_id: user.id,
-          file_name: file.name,
-          storage_path: filePath,
-        });
-
-      if (resumeError) throw resumeError;
-
       toast({ 
-        title: "CV Uploaded", 
-        description: "Your CV has been successfully uploaded." 
+        title: "Avatar Updated", 
+        description: "Your avatar has been changed." 
       });
 
-      checkForCv(); // Refresh the CV URL
-
     } catch (error) {
       toast({ 
-        title: "CV Upload Failed", 
+        title: "Avatar Upload Failed", 
         description: error.message, 
         variant: "destructive" 
       });
@@ -208,14 +133,128 @@ const CandidateProfilePage = () => {
     }
   };
 
+  const handleCvUpload = async (event) => {
+    if (!event.target.files || event.target.files.length === 0) {
+      toast({ 
+        title: "No file selected", 
+        description: "Please select a CV to upload.", 
+        variant: "destructive" 
+      });
+      return;
+    }
+
+    const file = event.target.files[0];
+    const allowedTypes = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    ];
+
+    if (!allowedTypes.includes(file.type)) {
+      toast({ 
+        title: "Invalid File Type", 
+        description: "Please upload a PDF or Word document.", 
+        variant: "destructive" 
+      });
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ 
+        title: "File Too Large", 
+        description: "CV file size should not exceed 5MB.", 
+        variant: "destructive" 
+      });
+      return;
+    }
+
+    setCvFile(file);
+    
+    try {
+      setCvUploading(true);
+      const fileExt = file.name.split('.').pop();
+      const timestamp = Date.now();
+      const filePath = `${user.id}/${timestamp}-${file.name}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('cvs')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      const { error: dbError } = await supabase
+        .from('resumes')
+        .insert({
+          user_id: user.id,
+          file_name: file.name,
+          storage_path: filePath,
+          file_type: file.type
+        });
+
+      if (dbError) throw dbError;
+
+      toast({ 
+        title: "CV Uploaded", 
+        description: `${file.name} has been successfully uploaded.` 
+      });
+      setCvFile(null);
+      document.getElementById('cv-upload-input').value = '';
+      fetchResumes();
+
+    } catch (error) {
+      toast({ 
+        title: "CV Upload Failed", 
+        description: error.message, 
+        variant: "destructive" 
+      });
+    } finally {
+      setCvUploading(false);
+    }
+  };
+
+  const deleteResume = async (resumeId, storagePath) => {
+    if (!window.confirm("Are you sure you want to delete this resume?")) return;
+
+    try {
+      const { error: storageError } = await supabase.storage
+        .from('cvs')
+        .remove([storagePath]);
+
+      if (storageError) throw storageError;
+
+      const { error: dbError } = await supabase
+        .from('resumes')
+        .delete()
+        .eq('id', resumeId);
+
+      if (dbError) throw dbError;
+      
+      toast({ 
+        title: "Resume Deleted", 
+        description: "The resume has been successfully deleted." 
+      });
+      fetchResumes();
+    } catch (error) {
+      toast({ 
+        title: "Error Deleting Resume", 
+        description: error.message, 
+        variant: "destructive" 
+      });
+    }
+  };
+
   if (pageLoading) {
-    return <div className="min-h-screen flex items-center justify-center bg-gray-900 text-white"><p>Loading profile...</p></div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-900 text-white">
+        <p>Loading profile...</p>
+      </div>
+    );
   }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-800 via-gray-900 to-black text-white p-6">
       <div className="container mx-auto">
-        <motion.div
+        <motion.div 
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
@@ -229,9 +268,9 @@ const CandidateProfilePage = () => {
           <h1 className="text-4xl font-bold text-indigo-300">Manage Your Profile</h1>
           <p className="text-lg text-gray-400">Keep your information and CV up-to-date.</p>
         </motion.div>
-
+        
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <motion.div
+          <motion.div 
             className="lg:col-span-2"
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
@@ -257,13 +296,13 @@ const CandidateProfilePage = () => {
                     <Label htmlFor="avatar-upload-input" className="cursor-pointer text-indigo-400 hover:text-indigo-300 transition-colors">
                       {uploading ? 'Uploading...' : 'Change Avatar'}
                     </Label>
-                    <Input
-                      id="avatar-upload-input"
-                      type="file"
-                      accept="image/*"
-                      onChange={handleAvatarUpload}
-                      disabled={uploading}
-                      className="hidden"
+                    <Input 
+                      id="avatar-upload-input" 
+                      type="file" 
+                      accept="image/*" 
+                      onChange={handleAvatarUpload} 
+                      disabled={uploading} 
+                      className="hidden" 
                     />
                   </div>
 
@@ -289,7 +328,11 @@ const CandidateProfilePage = () => {
                   </div>
                 </CardContent>
                 <CardFooter>
-                  <Button type="submit" disabled={uploading || authLoading} className="bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700">
+                  <Button 
+                    type="submit" 
+                    disabled={uploading || authLoading} 
+                    className="bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700"
+                  >
                     <Save className="w-5 h-5 mr-2" /> {uploading ? 'Saving...' : 'Save Changes'}
                   </Button>
                 </CardFooter>
@@ -307,7 +350,9 @@ const CandidateProfilePage = () => {
                 <CardTitle className="text-2xl text-indigo-300 flex items-center">
                   <UploadCloud className="w-8 h-8 mr-3 text-purple-400" /> Manage CV / Resume
                 </CardTitle>
-                <CardDescription className="text-gray-400">Upload or update your CV (PDF only, max 5MB).</CardDescription>
+                <CardDescription className="text-gray-400">
+                  Upload or update your CV (PDF or DOCX, max 5MB).
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div>
@@ -315,29 +360,46 @@ const CandidateProfilePage = () => {
                   <Input
                     id="cv-upload-input"
                     type="file"
-                    accept=".pdf"
+                    accept=".pdf,.doc,.docx"
                     onChange={handleCvUpload}
-                    disabled={uploading}
+                    disabled={cvUploading}
                     className="bg-gray-700 border-gray-600 file:text-indigo-300 file:bg-gray-600 file:border-0 file:rounded file:px-3 file:py-1.5 file:mr-3 hover:file:bg-indigo-500"
                   />
-                  {uploading && <p className="text-sm text-indigo-400 mt-2">Uploading CV...</p>}
+                  {cvUploading && (
+                    <p className="text-sm text-indigo-400 mt-2">Uploading CV...</p>
+                  )}
                 </div>
                 <div>
-                  <h4 className="text-lg font-semibold text-gray-300 mb-3">Current Resume:</h4>
-                  {cvUrl ? (
-                    <div className="flex items-center space-x-2 p-3 bg-gray-700/50 rounded-md">
-                      <FileText className="w-5 h-5 text-indigo-400" />
-                      <a
-                        href={cvUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sm text-indigo-300 hover:underline"
-                      >
-                        View Current Resume
-                      </a>
-                    </div>
+                  <h4 className="text-lg font-semibold text-gray-300 mb-3">Uploaded Resumes:</h4>
+                  {existingResumes.length > 0 ? (
+                    <ul className="space-y-3">
+                      {existingResumes.map(resume => (
+                        <li key={resume.id} className="flex justify-between items-center p-3 bg-gray-700/50 rounded-md">
+                          <div className="flex items-center space-x-2">
+                            <FileText className="w-5 h-5 text-indigo-400" />
+                            <a
+                              href={supabase.storage.from('cvs').getPublicUrl(resume.storage_path).data.publicUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-sm text-indigo-300 hover:underline truncate max-w-[150px] sm:max-w-[200px]"
+                              title={resume.file_name}
+                            >
+                              {resume.file_name}
+                            </a>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => deleteResume(resume.id, resume.storage_path)}
+                            className="text-red-400 hover:text-red-300"
+                          >
+                            <Trash2 className="w-4 h-4"/>
+                          </Button>
+                        </li>
+                      ))}
+                    </ul>
                   ) : (
-                    <p className="text-sm text-gray-500">No resume uploaded yet.</p>
+                    <p className="text-sm text-gray-500">No resumes uploaded yet.</p>
                   )}
                 </div>
               </CardContent>
