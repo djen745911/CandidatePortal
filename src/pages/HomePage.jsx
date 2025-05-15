@@ -38,14 +38,14 @@ const HomePage = () => {
           icon={<UserPlus className="w-12 h-12 text-indigo-300" />}
           title="Candidate Area"
           description="Register or login to manage your applications and profile."
-          linkTo="/login"
+          linkTo="/candidate"
           delay={0.6}
         />
         <FeatureCard
           icon={<LogIn className="w-12 h-12 text-blue-300" />}
-          title="Recruiter Hub"
-          description="Access tools to post jobs and manage applicants."
-          linkTo="/recruiter/login"
+          title="Login"
+          description="Already have an account? Sign in to access your dashboard."
+          linkTo="/login"
           delay={0.8}
         />
       </motion.div>
