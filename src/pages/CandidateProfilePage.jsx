@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { useToast } from '@/components/ui/use-toast';
 import { motion } from 'framer-motion';
-import { UserCircle, UploadCloud, Save, ArrowLeft, FileText, Trash2 } from 'lucide-react';
+import { UserCircle, UploadCloud, Save, ArrowLeft, FileText } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 
 const CandidateProfilePage = () => {
@@ -18,7 +18,7 @@ const CandidateProfilePage = () => {
   const [uploading, setUploading] = useState(false);
   const [cvFile, setCvFile] = useState(null);
   const [cvUploading, setCvUploading] = useState(false);
-  const [hasResume, setHasResume] = useState(false);
+  const [resumeUrl, setResumeUrl] = useState(null);
   const [pageLoading, setPageLoading] = useState(true);
 
   useEffect(() => {
@@ -34,12 +34,14 @@ const CandidateProfilePage = () => {
 
   const checkForResume = async () => {
     try {
-      // Check if resume exists at S3 URL
-      const response = await fetch(`https://n8nplatformfiles.s3.amazonaws.com/cv/${user.id}.pdf`);
-      setHasResume(response.ok);
+      const response = await fetch(`https://abc123xyz.execute-api.eu-west-2.amazonaws.com/default/generateSignedUrl?key=cv/${user.id}.pdf`);
+      if (response.ok) {
+        const data = await response.json();
+        setResumeUrl(data.url);
+      }
     } catch (error) {
       console.error('Error checking resume:', error);
-      setHasResume(false);
+      setResumeUrl(null);
     }
   };
 
@@ -148,7 +150,7 @@ const CandidateProfilePage = () => {
 
       setCvFile(null);
       document.getElementById('cv-upload-input').value = '';
-      setHasResume(true);
+      checkForResume(); // Check for the new resume URL
 
     } catch (error) {
       toast({ 
@@ -277,11 +279,11 @@ const CandidateProfilePage = () => {
                 </div>
                 <div>
                   <h4 className="text-lg font-semibold text-gray-300 mb-3">Current Resume:</h4>
-                  {hasResume ? (
+                  {resumeUrl ? (
                     <div className="flex items-center space-x-2 p-3 bg-gray-700/50 rounded-md">
                       <FileText className="w-5 h-5 text-indigo-400" />
                       <a
-                        href={`https://n8nplatformfiles.s3.amazonaws.com/cv/${user.id}.pdf`}
+                        href={resumeUrl}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-sm text-indigo-300 hover:underline"
