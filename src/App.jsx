@@ -1,4 +1,3 @@
-
 import React, { Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from '@/contexts/AuthContext';
@@ -9,8 +8,9 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 const HomePage = lazy(() => import('@/pages/HomePage'));
 const LoginPage = lazy(() => import('@/pages/LoginPage'));
 const RegisterPage = lazy(() => import('@/pages/RegisterPage'));
-const CandidateAreaPage = lazy(() => import('@/pages/CandidateAreaPage')); // New
-const CandidateDashboardPage = lazy(() => import('@/pages/CandidateDashboardPage')); // Kept for direct access if needed, but Area is primary
+const CandidateHomePage = lazy(() => import('@/pages/CandidateHomePage')); // Added
+const CandidateAreaPage = lazy(() => import('@/pages/CandidateAreaPage'));
+const CandidateDashboardPage = lazy(() => import('@/pages/CandidateDashboardPage'));
 const RecruiterDashboardPage = lazy(() => import('@/pages/RecruiterDashboardPage'));
 const JobListPage = lazy(() => import('@/pages/JobListPage')); 
 const JobDetailPage = lazy(() => import('@/pages/JobDetailPage'));
@@ -19,7 +19,6 @@ const CandidateProfilePage = lazy(() => import('@/pages/CandidateProfilePage'));
 const RecruiterPostJobPage = lazy(() => import('@/pages/RecruiterPostJobPage'));
 const RecruiterManageJobsPage = lazy(() => import('@/pages/RecruiterManageJobsPage'));
 const RecruiterApplicantsPage = lazy(() => import('@/pages/RecruiterApplicantsPage'));
-
 
 function App() {
   return (
@@ -37,8 +36,9 @@ function App() {
               <Route path="/jobs/:jobId" element={<JobDetailPage />} />
 
               <Route element={<ProtectedRoute allowedRoles={['candidate']} />}>
-                <Route path="/candidate/area" element={<CandidateAreaPage />} /> {/* New Candidate Landing */}
-                <Route path="/candidate/dashboard" element={<CandidateDashboardPage />} /> {/* Can be a more detailed dashboard or removed if Area is sufficient */}
+                <Route path="/candidate" element={<CandidateHomePage />} /> {/* Added */}
+                <Route path="/candidate/area" element={<CandidateAreaPage />} />
+                <Route path="/candidate/dashboard" element={<CandidateDashboardPage />} />
                 <Route path="/candidate/applications" element={<CandidateApplicationsPage />} />
                 <Route path="/candidate/profile" element={<CandidateProfilePage />} />
               </Route>
