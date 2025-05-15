@@ -8,7 +8,7 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 const HomePage = lazy(() => import('@/pages/HomePage'));
 const LoginPage = lazy(() => import('@/pages/LoginPage'));
 const RegisterPage = lazy(() => import('@/pages/RegisterPage'));
-const CandidateHomePage = lazy(() => import('@/pages/CandidateHomePage')); // Added
+const CandidateHomePage = lazy(() => import('@/pages/CandidateHomePage'));
 const CandidateAreaPage = lazy(() => import('@/pages/CandidateAreaPage'));
 const CandidateDashboardPage = lazy(() => import('@/pages/CandidateDashboardPage'));
 const RecruiterDashboardPage = lazy(() => import('@/pages/RecruiterDashboardPage'));
@@ -27,22 +27,24 @@ function App() {
         <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-gray-900 text-white"><p>Loading page...</p></div>}>
           <Routes>
             <Route element={<Layout />}>
+              {/* Public routes */}
               <Route path="/" element={<HomePage />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
               <Route path="/recruiter/login" element={<LoginPage />} /> 
-              
               <Route path="/jobs" element={<JobListPage />} />
               <Route path="/jobs/:jobId" element={<JobDetailPage />} />
 
+              {/* Protected candidate routes */}
               <Route element={<ProtectedRoute allowedRoles={['candidate']} />}>
-                <Route path="/candidate" element={<CandidateHomePage />} /> {/* Added */}
-                <Route path="/candidate/area" element={<CandidateAreaPage />} />
+                <Route path="/candidate" element={<CandidateHomePage />} />
+                <Route path="/candidate/area" element={<Navigate to="/candidate" replace />} />
                 <Route path="/candidate/dashboard" element={<CandidateDashboardPage />} />
                 <Route path="/candidate/applications" element={<CandidateApplicationsPage />} />
                 <Route path="/candidate/profile" element={<CandidateProfilePage />} />
               </Route>
 
+              {/* Protected recruiter routes */}
               <Route element={<ProtectedRoute allowedRoles={['recruiter']} />}>
                 <Route path="/recruiter/dashboard" element={<RecruiterDashboardPage />} />
                 <Route path="/recruiter/jobs/new" element={<RecruiterPostJobPage />} />
