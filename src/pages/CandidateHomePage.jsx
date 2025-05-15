@@ -54,14 +54,14 @@ const CandidateHomePage = () => {
         if (appsError) throw appsError;
         setApplications(appsData || []);
 
-        // Check if user has uploaded a resume
+        // Check if user has uploaded a resume using maybeSingle() instead of single()
         const { data: resumeData, error: resumeError } = await supabase
           .from('resumes')
           .select('id')
-          .eq('candidate_id', user.id)
-          .single();
+          .eq('user_id', user.id)
+          .maybeSingle();
 
-        if (resumeError && resumeError.code !== 'PGRST116') throw resumeError;
+        if (resumeError) throw resumeError;
         setHasResume(!!resumeData);
 
       } catch (error) {

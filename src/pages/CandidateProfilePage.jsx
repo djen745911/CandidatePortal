@@ -34,14 +34,39 @@ const CandidateProfilePage = () => {
 
   const checkForResume = async () => {
     try {
-      const response = await fetch(`https://abc123xyz.execute-api.eu-west-2.amazonaws.com/default/generateSignedUrl?key=cv/${user.id}.pdf`);
-      if (response.ok) {
-        const data = await response.json();
-        setResumeUrl(data.url);
+      // First check if the user has a resume in the database
+      const { data: resumeData, error: resumeError } = await supabase
+        .from('resumes')
+        .select('storage_path')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (resumeError) {
+        console.error('Error fetching resume data:', resumeError);
+        return;
+      }
+
+      if (resumeData?.storage_path) {
+        // Get a signed URL for the resume if it exists
+        const { data: { signedUrl }, error: signedUrlError } = await supabase
+          .storage
+          .from('resumes')
+          .createSignedUrl(resumeData.storage_path, 3600); // URL valid for 1 hour
+
+        if (signedUrlError) {
+          console.error('Error getting signed URL:', signedUrlError);
+          return;
+        }
+
+        setResumeUrl(signedUrl);
       }
     } catch (error) {
       console.error('Error checking resume:', error);
-      setResumeUrl(null);
+      toast({
+        title: "Error Loading Resume",
+        description: "Unable to load your resume. Please try again later.",
+        variant: "destructive"
+      });
     }
   };
 
@@ -127,21 +152,27 @@ const CandidateProfilePage = () => {
     try {
       setCvUploading(true);
 
-      // Create FormData object
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('userId', user.id);
-      formData.append('fileName', file.name);
+      // Upload file to Supabase Storage
+      const fileName = `${user.id}-${Date.now()}.pdf`;
+      const filePath = `resumes/${fileName}`;
 
-      // Send file to webhook
-      const response = await fetch('https://n8n.leadingedgeai.co.uk/webhook-test/9387fdb5-3a39-4790-b1e7-839038b1520e', {
-        method: 'POST',
-        body: formData
-      });
+      const { error: uploadError } = await supabase.storage
+        .from('resumes')
+        .upload(filePath, file);
 
-      if (!response.ok) {
-        throw new Error('Failed to upload CV');
-      }
+      if (uploadError) throw uploadError;
+
+      // Create or update resume record in the database
+      const { error: dbError } = await supabase
+        .from('resumes')
+        .upsert({
+          user_id: user.id,
+          file_name: file.name,
+          storage_path: filePath,
+          uploaded_at: new Date().toISOString()
+        });
+
+      if (dbError) throw dbError;
 
       toast({ 
         title: "CV Uploaded", 
@@ -150,7 +181,7 @@ const CandidateProfilePage = () => {
 
       setCvFile(null);
       document.getElementById('cv-upload-input').value = '';
-      checkForResume(); // Check for the new resume URL
+      checkForResume(); // Refresh the resume URL
 
     } catch (error) {
       toast({ 
