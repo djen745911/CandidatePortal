@@ -32,21 +32,50 @@ const CandidateProfilePage = () => {
 
   const checkForCv = async () => {
     try {
-      const cvPath = `cv/${user.id}.pdf`;
-      const { data: { publicUrl }, error: urlError } = supabase
-        .storage
-        .from('cvs')
-        .getPublicUrl(cvPath);
+      // First, get the latest resume record for the user
+      const { data: resumeData, error: resumeError } = await supabase
+        .from('resumes')
+        .select('storage_path')
+        .eq('user_id', user.id)
+        .order('uploaded_at', { ascending: false })
+        .limit(1)
+        .single();
 
-      if (urlError) {
-        console.error('Error getting CV URL:', urlError);
+      if (resumeError) {
+        if (resumeError.code === 'PGRST116') {
+          // No CV found - this is not an error, just means no CV uploaded yet
+          setCvUrl(null);
+          return;
+        }
+        throw resumeError;
+      }
+
+      if (!resumeData?.storage_path) {
+        setCvUrl(null);
         return;
       }
 
-      // Check if file exists by trying to fetch it
-      const response = await fetch(publicUrl, { method: 'HEAD' });
-      if (response.ok) {
+      // Get the public URL for the CV
+      const { data: { publicUrl }, error: urlError } = supabase
+        .storage
+        .from('cvs')
+        .getPublicUrl(resumeData.storage_path);
+
+      if (urlError) throw urlError;
+
+      // Verify the file exists by checking the storage bucket
+      const { data: fileCheck, error: fileError } = await supabase
+        .storage
+        .from('cvs')
+        .list(resumeData.storage_path.split('/').slice(0, -1).join('/'));
+
+      if (fileError) throw fileError;
+
+      const fileName = resumeData.storage_path.split('/').pop();
+      if (fileCheck.some(file => file.name === fileName)) {
         setCvUrl(publicUrl);
+      } else {
+        setCvUrl(null);
       }
     } catch (error) {
       console.error('Error checking CV:', error);
@@ -55,6 +84,7 @@ const CandidateProfilePage = () => {
         description: "Unable to check for existing CV.",
         variant: "destructive"
       });
+      setCvUrl(null);
     }
   };
 
@@ -138,14 +168,27 @@ const CandidateProfilePage = () => {
     try {
       setUploading(true);
 
-      // Upload file to Supabase Storage
-      const filePath = `cv/${user.id}.pdf`;
+      // Generate a unique file path for the CV
+      const timestamp = new Date().getTime();
+      const filePath = `cv/${user.id}/${timestamp}-${file.name}`;
 
+      // Upload file to Supabase Storage
       const { error: uploadError } = await supabase.storage
         .from('cvs')
-        .upload(filePath, file, { upsert: true });
+        .upload(filePath, file);
 
       if (uploadError) throw uploadError;
+
+      // Create or update the resume record in the database
+      const { error: resumeError } = await supabase
+        .from('resumes')
+        .insert({
+          user_id: user.id,
+          file_name: file.name,
+          storage_path: filePath,
+        });
+
+      if (resumeError) throw resumeError;
 
       toast({ 
         title: "CV Uploaded", 
