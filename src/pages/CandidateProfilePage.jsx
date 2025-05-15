@@ -216,7 +216,7 @@ const CandidateProfilePage = () => {
                 <CardContent className="space-y-6">
                     <div className="flex flex-col items-center space-y-4">
                         {avatarUrl ? (
-                            <img-replace src={avatarUrl} alt="User Avatar" className="w-32 h-32 rounded-full object-cover border-4 border-indigo-500 shadow-lg" />
+                            <img src={avatarUrl} alt="User Avatar" className="w-32 h-32 rounded-full object-cover border-4 border-indigo-500 shadow-lg" />
                         ) : (
                             <div className="w-32 h-32 rounded-full bg-gray-700 flex items-center justify-center border-4 border-indigo-500">
                                 <UserCircle className="w-20 h-20 text-gray-500" />
