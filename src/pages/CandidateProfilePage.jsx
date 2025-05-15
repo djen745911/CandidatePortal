@@ -16,9 +16,7 @@ const CandidateProfilePage = () => {
   const [fullName, setFullName] = useState('');
   const [avatarUrl, setAvatarUrl] = useState(null);
   const [uploading, setUploading] = useState(false);
-  const [cvFile, setCvFile] = useState(null);
-  const [cvUploading, setCvUploading] = useState(false);
-  const [resumeUrl, setResumeUrl] = useState(null);
+  const [cvUrl, setCvUrl] = useState(null);
   const [pageLoading, setPageLoading] = useState(true);
 
   useEffect(() => {
@@ -27,44 +25,34 @@ const CandidateProfilePage = () => {
       setAvatarUrl(profile.avatar_url || null);
     }
     if (user) {
-      checkForResume();
+      checkForCv();
     }
     if (!authLoading) setPageLoading(false);
   }, [profile, user, authLoading]);
 
-  const checkForResume = async () => {
+  const checkForCv = async () => {
     try {
-      // First check if the user has a resume in the database
-      const { data: resumeData, error: resumeError } = await supabase
-        .from('resumes')
-        .select('storage_path')
-        .eq('user_id', user.id)
-        .maybeSingle();
+      const cvPath = `cv/${user.id}.pdf`;
+      const { data: { publicUrl }, error: urlError } = supabase
+        .storage
+        .from('cvs')
+        .getPublicUrl(cvPath);
 
-      if (resumeError) {
-        console.error('Error fetching resume data:', resumeError);
+      if (urlError) {
+        console.error('Error getting CV URL:', urlError);
         return;
       }
 
-      if (resumeData?.storage_path) {
-        // Get a signed URL for the resume if it exists
-        const { data: { signedUrl }, error: signedUrlError } = await supabase
-          .storage
-          .from('resumes')
-          .createSignedUrl(resumeData.storage_path, 3600); // URL valid for 1 hour
-
-        if (signedUrlError) {
-          console.error('Error getting signed URL:', signedUrlError);
-          return;
-        }
-
-        setResumeUrl(signedUrl);
+      // Check if file exists by trying to fetch it
+      const response = await fetch(publicUrl, { method: 'HEAD' });
+      if (response.ok) {
+        setCvUrl(publicUrl);
       }
     } catch (error) {
-      console.error('Error checking resume:', error);
+      console.error('Error checking CV:', error);
       toast({
-        title: "Error Loading Resume",
-        description: "Unable to load your resume. Please try again later.",
+        title: "Error Loading CV",
+        description: "Unable to check for existing CV.",
         variant: "destructive"
       });
     }
@@ -147,41 +135,24 @@ const CandidateProfilePage = () => {
       return;
     }
 
-    setCvFile(file);
-    
     try {
-      setCvUploading(true);
+      setUploading(true);
 
       // Upload file to Supabase Storage
-      const fileName = `${user.id}-${Date.now()}.pdf`;
-      const filePath = `resumes/${fileName}`;
+      const filePath = `cv/${user.id}.pdf`;
 
       const { error: uploadError } = await supabase.storage
-        .from('resumes')
-        .upload(filePath, file);
+        .from('cvs')
+        .upload(filePath, file, { upsert: true });
 
       if (uploadError) throw uploadError;
 
-      // Create or update resume record in the database
-      const { error: dbError } = await supabase
-        .from('resumes')
-        .upsert({
-          user_id: user.id,
-          file_name: file.name,
-          storage_path: filePath,
-          uploaded_at: new Date().toISOString()
-        });
-
-      if (dbError) throw dbError;
-
       toast({ 
         title: "CV Uploaded", 
-        description: `${file.name} has been successfully uploaded.` 
+        description: "Your CV has been successfully uploaded." 
       });
 
-      setCvFile(null);
-      document.getElementById('cv-upload-input').value = '';
-      checkForResume(); // Refresh the resume URL
+      checkForCv(); // Refresh the CV URL
 
     } catch (error) {
       toast({ 
@@ -190,7 +161,7 @@ const CandidateProfilePage = () => {
         variant: "destructive" 
       });
     } finally {
-      setCvUploading(false);
+      setUploading(false);
     }
   };
 
@@ -303,18 +274,18 @@ const CandidateProfilePage = () => {
                     type="file"
                     accept=".pdf"
                     onChange={handleCvUpload}
-                    disabled={cvUploading}
+                    disabled={uploading}
                     className="bg-gray-700 border-gray-600 file:text-indigo-300 file:bg-gray-600 file:border-0 file:rounded file:px-3 file:py-1.5 file:mr-3 hover:file:bg-indigo-500"
                   />
-                  {cvUploading && <p className="text-sm text-indigo-400 mt-2">Uploading CV...</p>}
+                  {uploading && <p className="text-sm text-indigo-400 mt-2">Uploading CV...</p>}
                 </div>
                 <div>
                   <h4 className="text-lg font-semibold text-gray-300 mb-3">Current Resume:</h4>
-                  {resumeUrl ? (
+                  {cvUrl ? (
                     <div className="flex items-center space-x-2 p-3 bg-gray-700/50 rounded-md">
                       <FileText className="w-5 h-5 text-indigo-400" />
                       <a
-                        href={resumeUrl}
+                        href={cvUrl}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-sm text-indigo-300 hover:underline"
