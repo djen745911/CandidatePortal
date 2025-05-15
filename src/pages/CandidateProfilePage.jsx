@@ -172,7 +172,6 @@ const CandidateProfilePage = () => {
     
     try {
       setCvUploading(true);
-      const fileExt = file.name.split('.').pop();
       const timestamp = Date.now();
       const filePath = `${user.id}/${timestamp}-${file.name}`;
 
