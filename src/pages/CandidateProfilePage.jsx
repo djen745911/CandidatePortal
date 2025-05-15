@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { useToast } from '@/components/ui/use-toast';
 import { motion } from 'framer-motion';
 import { UserCircle, UploadCloud, Save, ArrowLeft, FileText, Trash2 } from 'lucide-react';
+import { supabase } from '@/lib/supabaseClient';
 
 const CandidateProfilePage = () => {
   const { user, profile, fetchProfile, loading: authLoading } = useAuth();
