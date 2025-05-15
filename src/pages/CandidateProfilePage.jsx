@@ -18,7 +18,7 @@ const CandidateProfilePage = () => {
   const [uploading, setUploading] = useState(false);
   const [cvFile, setCvFile] = useState(null);
   const [cvUploading, setCvUploading] = useState(false);
-  const [existingResumes, setExistingResumes] = useState([]);
+  const [hasResume, setHasResume] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
 
   useEffect(() => {
@@ -27,23 +27,19 @@ const CandidateProfilePage = () => {
       setAvatarUrl(profile.avatar_url || null);
     }
     if (user) {
-      fetchResumes();
+      checkForResume();
     }
     if (!authLoading) setPageLoading(false);
   }, [profile, user, authLoading]);
 
-  const fetchResumes = async () => {
-    if (!user) return;
-    const { data, error } = await supabase
-      .from('resumes')
-      .select('id, file_name, uploaded_at, storage_path')
-      .eq('candidate_id', user.id)
-      .order('uploaded_at', { ascending: false });
-
-    if (error) {
-      toast({ title: "Error fetching resumes", description: error.message, variant: "destructive" });
-    } else {
-      setExistingResumes(data || []);
+  const checkForResume = async () => {
+    try {
+      // Check if resume exists at S3 URL
+      const response = await fetch(`https://n8nplatformfiles.s3.amazonaws.com/cv/${user.id}.pdf`);
+      setHasResume(response.ok);
+    } catch (error) {
+      console.error('Error checking resume:', error);
+      setHasResume(false);
     }
   };
 
@@ -152,7 +148,7 @@ const CandidateProfilePage = () => {
 
       setCvFile(null);
       document.getElementById('cv-upload-input').value = '';
-      fetchResumes();
+      setHasResume(true);
 
     } catch (error) {
       toast({ 
@@ -162,23 +158,6 @@ const CandidateProfilePage = () => {
       });
     } finally {
       setCvUploading(false);
-    }
-  };
-
-  const deleteResume = async (resumeId, storagePath) => {
-    if (!window.confirm("Are you sure you want to delete this resume?")) return;
-
-    try {
-      const { error: storageError } = await supabase.storage.from('resumes').remove([storagePath]);
-      if (storageError) throw storageError;
-
-      const { error: dbError } = await supabase.from('resumes').delete().eq('id', resumeId);
-      if (dbError) throw dbError;
-      
-      toast({ title: "Resume Deleted", description: "The resume has been successfully deleted." });
-      fetchResumes();
-    } catch (error) {
-      toast({ title: "Error Deleting Resume", description: error.message, variant: "destructive" });
     }
   };
 
@@ -297,36 +276,21 @@ const CandidateProfilePage = () => {
                   {cvUploading && <p className="text-sm text-indigo-400 mt-2">Uploading CV...</p>}
                 </div>
                 <div>
-                  <h4 className="text-lg font-semibold text-gray-300 mb-3">Uploaded Resumes:</h4>
-                  {existingResumes.length > 0 ? (
-                    <ul className="space-y-3">
-                      {existingResumes.map(resume => (
-                        <li key={resume.id} className="flex justify-between items-center p-3 bg-gray-700/50 rounded-md">
-                          <div className="flex items-center space-x-2">
-                            <FileText className="w-5 h-5 text-indigo-400" />
-                            <a
-                              href={supabase.storage.from('resumes').getPublicUrl(resume.storage_path).data.publicUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-sm text-indigo-300 hover:underline truncate max-w-[150px] sm:max-w-[200px]"
-                              title={resume.file_name}
-                            >
-                              {resume.file_name}
-                            </a>
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => deleteResume(resume.id, resume.storage_path)}
-                            className="text-red-400 hover:text-red-300"
-                          >
-                            <Trash2 className="w-4 h-4"/>
-                          </Button>
-                        </li>
-                      ))}
-                    </ul>
+                  <h4 className="text-lg font-semibold text-gray-300 mb-3">Current Resume:</h4>
+                  {hasResume ? (
+                    <div className="flex items-center space-x-2 p-3 bg-gray-700/50 rounded-md">
+                      <FileText className="w-5 h-5 text-indigo-400" />
+                      <a
+                        href={`https://n8nplatformfiles.s3.amazonaws.com/cv/${user.id}.pdf`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-indigo-300 hover:underline"
+                      >
+                        View Current Resume
+                      </a>
+                    </div>
                   ) : (
-                    <p className="text-sm text-gray-500">No resumes uploaded yet.</p>
+                    <p className="text-sm text-gray-500">No resume uploaded yet.</p>
                   )}
                 </div>
               </CardContent>
