@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -25,7 +24,7 @@ const CandidateAreaPage = () => {
     <div className="min-h-screen bg-gradient-to-br from-gray-800 via-gray-900 to-black text-white">
       <header className="bg-black/40 backdrop-blur-md shadow-xl p-4 sticky top-0 z-50">
         <div className="container mx-auto flex justify-between items-center">
-          <Link to="/" className="text-2xl font-bold bg-gradient-to-r from-teal-400 via-cyan-500 to-sky-600 bg-clip-text text-transparent">
+          <Link to="/candidate" className="text-2xl font-bold bg-gradient-to-r from-teal-400 via-cyan-500 to-sky-600 bg-clip-text text-transparent">
             My Candidate Space
           </Link>
           <div className="flex items-center space-x-4">
