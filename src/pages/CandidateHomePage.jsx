@@ -6,7 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { motion } from 'framer-motion';
 import { supabase } from '@/lib/supabaseClient';
 import { useToast } from '@/components/ui/use-toast';
-import { Briefcase, MapPin, DollarSign, Search, FileText, Clock, AlertTriangle, Loader2, Filter } from 'lucide-react';
+import { Briefcase, MapPin, DollarSign, Search, FileText, Clock, AlertTriangle, Loader2, Filter, UploadCloud } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 const CandidateHomePage = () => {
   const { user, profile, loading: authLoading } = useAuth();
@@ -15,6 +17,8 @@ const CandidateHomePage = () => {
   const [applications, setApplications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [hasResume, setHasResume] = useState(false);
+  const [uploadingResume, setUploadingResume] = useState(false);
+  const [existingResumes, setExistingResumes] = useState([]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -54,15 +58,16 @@ const CandidateHomePage = () => {
         if (appsError) throw appsError;
         setApplications(appsData || []);
 
-        // Check if user has uploaded a resume using maybeSingle() instead of single()
-        const { data: resumeData, error: resumeError } = await supabase
+        // Fetch user's resumes
+        const { data: resumesData, error: resumesError } = await supabase
           .from('resumes')
-          .select('id')
+          .select('*')
           .eq('user_id', user.id)
-          .maybeSingle();
+          .order('uploaded_at', { ascending: false });
 
-        if (resumeError) throw resumeError;
-        setHasResume(!!resumeData);
+        if (resumesError) throw resumesError;
+        setExistingResumes(resumesData || []);
+        setHasResume(resumesData && resumesData.length > 0);
 
       } catch (error) {
         console.error('Error fetching data:', error);
@@ -78,6 +83,127 @@ const CandidateHomePage = () => {
 
     fetchData();
   }, [user, toast]);
+
+  const handleResumeUpload = async (event) => {
+    if (!event.target.files || event.target.files.length === 0) {
+      toast({ 
+        title: "No file selected", 
+        description: "Please select a CV to upload.", 
+        variant: "destructive" 
+      });
+      return;
+    }
+
+    const file = event.target.files[0];
+    const allowedTypes = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    ];
+
+    if (!allowedTypes.includes(file.type)) {
+      toast({ 
+        title: "Invalid File Type", 
+        description: "Please upload a PDF or Word document.", 
+        variant: "destructive" 
+      });
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ 
+        title: "File Too Large", 
+        description: "CV file size should not exceed 5MB.", 
+        variant: "destructive" 
+      });
+      return;
+    }
+    
+    try {
+      setUploadingResume(true);
+      const timestamp = Date.now();
+      const filePath = `${user.id}/${timestamp}-${file.name}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('resumes')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      const { error: dbError } = await supabase
+        .from('resumes')
+        .insert({
+          user_id: user.id,
+          file_name: file.name,
+          storage_path: filePath,
+          file_type: file.type
+        });
+
+      if (dbError) throw dbError;
+
+      toast({ 
+        title: "CV Uploaded", 
+        description: `${file.name} has been successfully uploaded.` 
+      });
+      
+      // Refresh resumes list
+      const { data: resumesData } = await supabase
+        .from('resumes')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('uploaded_at', { ascending: false });
+      
+      setExistingResumes(resumesData || []);
+      setHasResume(true);
+      
+      // Clear the input
+      event.target.value = '';
+
+    } catch (error) {
+      toast({ 
+        title: "CV Upload Failed", 
+        description: error.message, 
+        variant: "destructive" 
+      });
+    } finally {
+      setUploadingResume(false);
+    }
+  };
+
+  const deleteResume = async (resumeId, storagePath) => {
+    if (!window.confirm("Are you sure you want to delete this resume?")) return;
+
+    try {
+      const { error: storageError } = await supabase.storage
+        .from('resumes')
+        .remove([storagePath]);
+
+      if (storageError) throw storageError;
+
+      const { error: dbError } = await supabase
+        .from('resumes')
+        .delete()
+        .eq('id', resumeId);
+
+      if (dbError) throw dbError;
+      
+      toast({ 
+        title: "Resume Deleted", 
+        description: "The resume has been successfully deleted." 
+      });
+      
+      setExistingResumes(prev => prev.filter(resume => resume.id !== resumeId));
+      if (existingResumes.length <= 1) {
+        setHasResume(false);
+      }
+    } catch (error) {
+      toast({ 
+        title: "Error Deleting Resume", 
+        description: error.message, 
+        variant: "destructive" 
+      });
+    }
+  };
 
   if (authLoading) {
     return (
@@ -110,29 +236,83 @@ const CandidateHomePage = () => {
         </div>
       </section>
 
-      {/* Resume Alert */}
-      {!hasResume && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.2 }}
-          className="container mx-auto px-6 mb-8"
-        >
-          <div className="bg-yellow-500/20 border border-yellow-500/30 rounded-lg p-4 flex items-center justify-between">
-            <div className="flex items-center">
-              <AlertTriangle className="h-6 w-6 text-yellow-400 mr-3" />
-              <p className="text-yellow-300">Upload your resume to start applying for jobs!</p>
-            </div>
-            <Link to="/candidate/profile">
-              <Button variant="outline" className="border-yellow-400 text-yellow-300 hover:bg-yellow-400 hover:text-black">
-                Upload Resume
-              </Button>
-            </Link>
-          </div>
-        </motion.div>
-      )}
-
       <div className="container mx-auto px-6 space-y-8">
+        {/* Resume Upload Section */}
+        <motion.section
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.5, delay: 0.2 }}
+        >
+          <Card className="bg-gray-800/50 border-gray-700">
+            <CardHeader>
+              <CardTitle className="text-xl text-indigo-300 flex items-center">
+                <UploadCloud className="h-6 w-6 mr-2 text-purple-400" />
+                Resume Management
+              </CardTitle>
+              <CardDescription className="text-gray-400">
+                Upload or update your CV (PDF or Word document, max 5MB)
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="resume-upload" className="text-gray-300">Upload New Resume</Label>
+                <Input
+                  id="resume-upload"
+                  type="file"
+                  accept=".pdf,.doc,.docx"
+                  onChange={handleResumeUpload}
+                  disabled={uploadingResume}
+                  className="bg-gray-700/50 border-gray-600 file:bg-purple-600 file:text-white file:border-0 file:rounded-md file:px-4 file:py-2 hover:file:bg-purple-700 cursor-pointer"
+                />
+                {uploadingResume && (
+                  <div className="flex items-center text-sm text-purple-400">
+                    <Loader2 className="animate-spin h-4 w-4 mr-2" />
+                    Uploading...
+                  </div>
+                )}
+              </div>
+              
+              {existingResumes.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="text-sm font-medium text-gray-300">Your Resumes:</h4>
+                  <div className="space-y-2">
+                    {existingResumes.map(resume => (
+                      <div key={resume.id} className="flex items-center justify-between p-3 bg-gray-700/50 rounded-md">
+                        <div className="flex items-center space-x-2">
+                          <FileText className="h-4 w-4 text-indigo-400" />
+                          <a 
+                            href={supabase.storage.from('resumes').getPublicUrl(resume.storage_path).data.publicUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm text-indigo-300 hover:underline truncate max-w-[200px]"
+                          >
+                            {resume.file_name}
+                          </a>
+                        </div>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => deleteResume(resume.id, resume.storage_path)}
+                          className="text-red-400 hover:text-red-300 hover:bg-red-500/20"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {existingResumes.length === 0 && (
+                <div className="text-center py-4">
+                  <FileText className="h-12 w-12 text-gray-500 mx-auto mb-2" />
+                  <p className="text-gray-400">No resumes uploaded yet</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </motion.section>
+
         {/* Quick Actions */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
