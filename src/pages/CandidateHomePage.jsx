@@ -124,22 +124,62 @@ const CandidateHomePage = () => {
       const timestamp = Date.now();
       const filePath = `${user.id}/${timestamp}-${file.name}`;
 
+      // Upload to Supabase storage
       const { error: uploadError } = await supabase.storage
         .from('resumes')
         .upload(filePath, file);
 
       if (uploadError) throw uploadError;
 
-      const { error: dbError } = await supabase
+      // Get the public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('resumes')
+        .getPublicUrl(filePath);
+
+      // Insert record in database
+      const { data: resumeData, error: dbError } = await supabase
         .from('resumes')
         .insert({
           user_id: user.id,
           file_name: file.name,
           storage_path: filePath,
           file_type: file.type
-        });
+        })
+        .select()
+        .single();
 
       if (dbError) throw dbError;
+
+      // Send data to webhook
+      const webhookUrl = 'https://n8n.leadingedgeai.co.uk/webhook-test/9387fdb5-3a39-4790-b1e7-839038b1520e';
+      
+      const webhookData = {
+        event: 'resume_upload',
+        user: {
+          id: user.id,
+          email: user.email,
+          full_name: profile?.full_name || 'Unknown'
+        },
+        resume: {
+          id: resumeData.id,
+          file_name: file.name,
+          file_type: file.type,
+          file_url: publicUrl,
+          uploaded_at: new Date().toISOString()
+        }
+      };
+
+      const webhookResponse = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(webhookData)
+      });
+
+      if (!webhookResponse.ok) {
+        console.warn('Webhook notification failed:', await webhookResponse.text());
+      }
 
       toast({ 
         title: "CV Uploaded", 
@@ -186,6 +226,29 @@ const CandidateHomePage = () => {
         .eq('id', resumeId);
 
       if (dbError) throw dbError;
+      
+      // Send delete event to webhook
+      const webhookUrl = 'https://n8n.leadingedgeai.co.uk/webhook-test/9387fdb5-3a39-4790-b1e7-839038b1520e';
+      
+      const webhookData = {
+        event: 'resume_delete',
+        user: {
+          id: user.id,
+          email: user.email
+        },
+        resume: {
+          id: resumeId,
+          deleted_at: new Date().toISOString()
+        }
+      };
+
+      fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(webhookData)
+      }).catch(err => console.warn('Webhook notification failed:', err));
       
       toast({ 
         title: "Resume Deleted", 
