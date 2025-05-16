@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { motion } from 'framer-motion';
 import { supabase } from '@/lib/supabaseClient';
 import { useToast } from '@/components/ui/use-toast';
-import { Briefcase, MapPin, DollarSign, Search, FileText, Clock, AlertTriangle, Loader2, Filter, UploadCloud } from 'lucide-react';
+import { Briefcase, MapPin, DollarSign, Search, FileText, Clock, AlertTriangle, Loader2, Filter, UploadCloud, Trash2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
@@ -243,57 +243,88 @@ const CandidateHomePage = () => {
           animate={{ opacity: 1 }}
           transition={{ duration: 0.5, delay: 0.2 }}
         >
-          <Card className="bg-gray-800/50 border-gray-700">
-            <CardHeader>
+          <Card className="bg-gray-800/50 border-gray-700 shadow-lg">
+            <CardHeader className="border-b border-gray-700/50 pb-4">
               <CardTitle className="text-xl text-indigo-300 flex items-center">
                 <UploadCloud className="h-6 w-6 mr-2 text-purple-400" />
                 Resume Management
               </CardTitle>
               <CardDescription className="text-gray-400">
-                Upload or update your CV (PDF or Word document, max 5MB)
+                Upload or update your resume to apply for jobs
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="resume-upload" className="text-gray-300">Upload New Resume</Label>
+            <CardContent className="space-y-6 pt-6">
+              <div className="bg-gray-700/30 rounded-lg p-6 border border-gray-700/50">
+                <Label 
+                  htmlFor="resume-upload" 
+                  className="flex flex-col items-center justify-center cursor-pointer"
+                >
+                  <div className="bg-indigo-600/20 p-4 rounded-full mb-3">
+                    <UploadCloud className="h-8 w-8 text-indigo-400" />
+                  </div>
+                  <span className="text-indigo-300 font-medium mb-1">Click to upload your resume</span>
+                  <span className="text-xs text-gray-400 mb-3">PDF or Word document (max 5MB)</span>
+                  <Button 
+                    variant="outline" 
+                    className="border-indigo-500 text-indigo-300 hover:bg-indigo-500 hover:text-white"
+                    disabled={uploadingResume}
+                  >
+                    {uploadingResume ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Uploading...
+                      </>
+                    ) : (
+                      <>
+                        <FileText className="mr-2 h-4 w-4" />
+                        Select Resume
+                      </>
+                    )}
+                  </Button>
+                </Label>
                 <Input
                   id="resume-upload"
                   type="file"
                   accept=".pdf,.doc,.docx"
                   onChange={handleResumeUpload}
                   disabled={uploadingResume}
-                  className="bg-gray-700/50 border-gray-600 file:bg-purple-600 file:text-white file:border-0 file:rounded-md file:px-4 file:py-2 hover:file:bg-purple-700 cursor-pointer"
+                  className="hidden"
                 />
-                {uploadingResume && (
-                  <div className="flex items-center text-sm text-purple-400">
-                    <Loader2 className="animate-spin h-4 w-4 mr-2" />
-                    Uploading...
-                  </div>
-                )}
               </div>
               
               {existingResumes.length > 0 && (
-                <div className="space-y-2">
-                  <h4 className="text-sm font-medium text-gray-300">Your Resumes:</h4>
-                  <div className="space-y-2">
+                <div className="space-y-3">
+                  <h4 className="text-sm font-medium text-indigo-300 mb-2">Your Resumes</h4>
+                  <div className="grid gap-3 md:grid-cols-2">
                     {existingResumes.map(resume => (
-                      <div key={resume.id} className="flex items-center justify-between p-3 bg-gray-700/50 rounded-md">
-                        <div className="flex items-center space-x-2">
-                          <FileText className="h-4 w-4 text-indigo-400" />
-                          <a 
-                            href={supabase.storage.from('resumes').getPublicUrl(resume.storage_path).data.publicUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-sm text-indigo-300 hover:underline truncate max-w-[200px]"
-                          >
-                            {resume.file_name}
-                          </a>
+                      <div 
+                        key={resume.id} 
+                        className="flex items-center justify-between p-4 bg-gray-700/30 rounded-lg border border-gray-700/50 hover:border-indigo-500/30 transition-colors"
+                      >
+                        <div className="flex items-center space-x-3 overflow-hidden">
+                          <div className="bg-gray-800 p-2 rounded-md">
+                            <FileText className="h-5 w-5 text-indigo-400" />
+                          </div>
+                          <div className="overflow-hidden">
+                            <a 
+                              href={supabase.storage.from('resumes').getPublicUrl(resume.storage_path).data.publicUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-sm text-indigo-300 hover:text-indigo-200 hover:underline font-medium truncate block"
+                              title={resume.file_name}
+                            >
+                              {resume.file_name}
+                            </a>
+                            <span className="text-xs text-gray-400">
+                              {new Date(resume.uploaded_at).toLocaleDateString()}
+                            </span>
+                          </div>
                         </div>
                         <Button 
                           variant="ghost" 
                           size="sm" 
                           onClick={() => deleteResume(resume.id, resume.storage_path)}
-                          className="text-red-400 hover:text-red-300 hover:bg-red-500/20"
+                          className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -304,9 +335,10 @@ const CandidateHomePage = () => {
               )}
               
               {existingResumes.length === 0 && (
-                <div className="text-center py-4">
-                  <FileText className="h-12 w-12 text-gray-500 mx-auto mb-2" />
-                  <p className="text-gray-400">No resumes uploaded yet</p>
+                <div className="text-center py-6 bg-gray-700/20 rounded-lg border border-gray-700/50">
+                  <FileText className="h-12 w-12 text-gray-500 mx-auto mb-3" />
+                  <p className="text-gray-400 mb-1">No resumes uploaded yet</p>
+                  <p className="text-xs text-gray-500">Upload your resume to start applying for jobs</p>
                 </div>
               )}
             </CardContent>
