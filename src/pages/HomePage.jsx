@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { motion } from 'framer-motion';
-import { Briefcase, UserPlus, LogIn } from 'lucide-react';
+import { Briefcase, UserPlus } from 'lucide-react';
 
 const HomePage = () => {
   return (
@@ -25,7 +25,7 @@ const HomePage = () => {
         initial={{ opacity: 0, scale: 0.8 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.5, delay: 0.3, ease: "backOut" }}
-        className="grid grid-cols-1 md:grid-cols-3 gap-8 w-full max-w-4xl"
+        className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-3xl"
       >
         <FeatureCard
           icon={<Briefcase className="w-12 h-12 text-purple-300" />}
@@ -40,13 +40,6 @@ const HomePage = () => {
           description="Register or login to manage your applications and profile."
           linkTo="/candidate"
           delay={0.6}
-        />
-        <FeatureCard
-          icon={<LogIn className="w-12 h-12 text-blue-300" />}
-          title="Login"
-          description="Already have an account? Sign in to access your dashboard."
-          linkTo="/login"
-          delay={0.8}
         />
       </motion.div>
 
